@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>notepad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #111111;
+      --surface:  #181818;
+      --border:   #2a2a2a;
+      --text:     #d6d3cc;
+      --muted:    #555;
+      --accent:   #c8a96e;
+      --green:    #5a9e6f;
+      --red:      #9e5a5a;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-ui:   'Syne', sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LOCK SCREEN ── */
+    #lock-screen {
+      position: fixed; inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      background: var(--bg);
+      z-index: 100;
+      transition: opacity 0.35s ease;
+    }
+
+    #lock-screen.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .lock-label {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .lock-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .pin-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .pin-dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .pin-dot.filled {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 56px);
+      grid-template-rows: repeat(4, 48px);
+      gap: 8px;
+    }
+
+    .key {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s, transform 0.08s;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none;
+    }
+
+    .key:active, .key.pressed {
+      background: #252525;
+      border-color: var(--accent);
+      transform: scale(0.93);
+    }
+
+    .key.del {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .key.empty {
+      background: transparent;
+      border-color: transparent;
+      cursor: default;
+    }
+
+    .lock-error {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--red);
+      height: 16px;
+      transition: opacity 0.2s;
+    }
+
+    /* ── NOTEPAD ── */
+    #notepad-screen {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #notepad-screen.visible {
+      display: flex;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topbar-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .sync-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .sync-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.4s;
+    }
+
+    .sync-dot.live    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .sync-dot.syncing { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 0.6s ease infinite alternate; }
+    .sync-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    @keyframes pulse {
+      from { opacity: 0.5; }
+      to   { opacity: 1; }
+    }
+
+    .clear-btn {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .clear-btn:hover {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    #editor {
+      flex: 1;
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: var(--font-mono);
+      font-size: 14.5px;
+      line-height: 1.7;
+      padding: 28px 32px;
+      caret-color: var(--accent);
+    }
+
+    #editor::placeholder { color: #333; }
+    #editor::selection { background: rgba(200, 169, 110, 0.18); }
+
+    .bottombar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 20px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .char-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #333;
+    }
+
+    .lock-again {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #333;
+      cursor: pointer;
+      text-transform: uppercase;
+      background: none; border: none;
+      transition: color 0.15s;
+    }
+
+    .lock-again:hover { color: var(--muted); }
+
+    #editor::-webkit-scrollbar { width: 6px; }
+    #editor::-webkit-scrollbar-track { background: transparent; }
+    #editor::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── LOCK SCREEN ── -->
+<div id="lock-screen">
+  <span class="lock-label">notepad</span>
+  <span class="lock-title">enter pin</span>
+
+  <div class="pin-row" id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+
+  <div class="keypad" id="keypad">
+    <div class="key" data-k="1">1</div>
+    <div class="key" data-k="2">2</div>
+    <div class="key" data-k="3">3</div>
+    <div class="key" data-k="4">4</div>
+    <div class="key" data-k="5">5</div>
+    <div class="key" data-k="6">6</div>
+    <div class="key" data-k="7">7</div>
+    <div class="key" data-k="8">8</div>
+    <div class="key" data-k="9">9</div>
+    <div class="key empty"></div>
+    <div class="key" data-k="0">0</div>
+    <div class="key del" data-k="del">del</div>
+  </div>
+
+  <div class="lock-error" id="lock-error"></div>
+</div>
+
+<!-- ── NOTEPAD ── -->
+<div id="notepad-screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-title">notepad</span>
+    </div>
+    <div class="sync-indicator">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-label">connecting</span>
+    </div>
+    <button class="clear-btn" id="clear-btn">clear</button>
+  </div>
+
+  <textarea id="editor" placeholder="start typing…" spellcheck="false"></textarea>
+
+  <div class="bottombar">
+    <span class="char-count" id="char-count">0 chars</span>
+    <button class="lock-again" id="lock-again-btn">lock</button>
+  </div>
+</div>
+
+<script>
+  // ── CONFIG ──
+  const CORRECT_PIN = '7777';
+  const SESSION_KEY = 'notepad_session';
+
+  // ── PIN LOGIC ──
+  let pin = '';
+  const dots = [0,1,2,3].map(i => document.getElementById('d' + i));
+  const lockError = document.getElementById('lock-error');
+
+  function updateDots() {
+    dots.forEach((d, i) => d.classList.toggle('filled', i < pin.length));
+  }
+
+  function shake() {
+    const row = document.getElementById('pin-dots');
+    row.style.animation = 'none';
+    row.offsetHeight;
+    row.style.animation = 'shake 0.35s ease';
+  }
+
+  const shakeStyle = document.createElement('style');
+  shakeStyle.textContent = `@keyframes shake {
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-8px)}
+    40%{transform:translateX(8px)}
+    60%{transform:translateX(-6px)}
+    80%{transform:translateX(6px)}
+  }`;
+  document.head.appendChild(shakeStyle);
+
+  function submitPin() {
+    if (pin === CORRECT_PIN) {
+      lockError.textContent = '';
+      try { localStorage.setItem(SESSION_KEY, CORRECT_PIN); } catch(e) {}
+      openNotepad();
+    } else {
+      shake();
+      lockError.textContent = 'wrong pin';
+      pin = '';
+      updateDots();
+      setTimeout(() => lockError.textContent = '', 1400);
+    }
+  }
+
+  function appendDigit(d) {
+    if (pin.length >= 4) return;
+    pin += d;
+    updateDots();
+    if (pin.length === 4) setTimeout(submitPin, 120);
+  }
+
+  function deleteDigit() {
+    pin = pin.slice(0, -1);
+    lockError.textContent = '';
+    updateDots();
+  }
+
+  document.getElementById('keypad').addEventListener('click', e => {
+    const key = e.target.closest('.key');
+    if (!key) return;
+    const k = key.dataset.k;
+    if (!k || key.classList.contains('empty')) return;
+    key.classList.add('pressed');
+    setTimeout(() => key.classList.remove('pressed'), 120);
+    if (k === 'del') deleteDigit();
+    else appendDigit(k);
+  });
+
+  document.addEventListener('keydown', e => {
+    const lock = document.getElementById('lock-screen');
+    if (lock.classList.contains('fade-out') || lock.style.display === 'none') return;
+    if (e.key >= '0' && e.key <= '9') appendDigit(e.key);
+    if (e.key === 'Backspace' || e.key === 'Delete') deleteDigit();
+  });
+
+  // ── NOTEPAD + SYNC ──
+  const editor    = document.getElementById('editor');
+  const syncDot   = document.getElementById('sync-dot');
+  const syncLabel = document.getElementById('sync-label');
+  const charCount = document.getElementById('char-count');
+
+  let ws = null;
+  let isRemoteUpdate = false;
+  let sendTimer = null;
+  let reconnectTimer = null;
+
+  function setSyncState(state) {
+    syncDot.className = 'sync-dot ' + state;
+    syncLabel.textContent =
+      state === 'live'    ? 'live' :
+      state === 'syncing' ? 'syncing…' :
+      state === 'offline' ? 'offline' : 'connecting';
+  }
+
+  function connectWebSocket() {
+    if (ws && ws.readyState <= 1) return; // already open or connecting
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.addEventListener('open', () => {
+      setSyncState('live');
+      clearTimeout(reconnectTimer);
+    });
+
+    ws.addEventListener('message', e => {
+      const text = e.data;
+      if (text === editor.value) return;
+
+      const sel = [editor.selectionStart, editor.selectionEnd];
+      isRemoteUpdate = true;
+      editor.value = text;
+      isRemoteUpdate = false;
+      try { editor.setSelectionRange(sel[0], sel[1]); } catch(err) {}
+      charCount.textContent = text.length + ' chars';
+      setSyncState('live');
+    });
+
+    ws.addEventListener('close', () => {
+      setSyncState('offline');
+      scheduleReconnect();
+    });
+
+    ws.addEventListener('error', () => {
+      setSyncState('offline');
+    });
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connectWebSocket, 3000);
+  }
+
+  function sendUpdate() {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(editor.value);
+  }
+
+  function openNotepad() {
+    const lockEl = document.getElementById('lock-screen');
+    lockEl.classList.add('fade-out');
+    setTimeout(() => lockEl.style.display = 'none', 380);
+    document.getElementById('notepad-screen').classList.add('visible');
+    connectWebSocket();
+  }
+
+  editor.addEventListener('input', () => {
+    if (isRemoteUpdate) return;
+    charCount.textContent = editor.value.length + ' chars';
+    setSyncState('syncing');
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(() => {
+      sendUpdate();
+      setSyncState('live');
+    }, 300);
+  });
+
+  // ── CLEAR ──
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    if (!confirm('Clear everything?')) return;
+    editor.value = '';
+    charCount.textContent = '0 chars';
+    sendUpdate();
+  });
+
+  // ── LOCK ──
+  document.getElementById('lock-again-btn').addEventListener('click', () => {
+    if (ws) { ws.close(); ws = null; }
+    clearTimeout(reconnectTimer);
+    pin = '';
+    updateDots();
+    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+    document.getElementById('notepad-screen').classList.remove('visible');
+    const lockEl = document.getElementById('lock-screen');
+    lockEl.style.display = '';
+    lockEl.style.opacity = '1';
+    lockEl.classList.remove('fade-out');
+  });
+
+  // ── AUTO-LOGIN ──
+  try {
+    if (localStorage.getItem(SESSION_KEY) === CORRECT_PIN) openNotepad();
+  } catch(e) {}
+</script>
+</body>
+</html>

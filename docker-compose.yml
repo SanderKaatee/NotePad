@@ -1,0 +1,12 @@
+services:
+  notepad:
+    build: .
+    container_name: notepad
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - notepad-data:/data
+    restart: unless-stopped
+
+volumes:
+  notepad-data:
