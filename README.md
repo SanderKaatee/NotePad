@@ -47,17 +47,19 @@ The server needs WebSocket support. Here's a Caddy example:
 
 ```
 note.example.com {
-    @ws path /ws
-    reverse_proxy @ws localhost:8002 {
-        transport http {
-            read_timeout 0
-            write_timeout 0
-        }
-        header_up Connection {>Connection}
-        header_up Upgrade {>Upgrade}
+    reverse_proxy localhost:8002
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
     }
 
-    reverse_proxy localhost:8002
+    log {
+        output file /var/log/caddy/notepad.log
+        format json
+    }
 }
 ```
 
